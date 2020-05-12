@@ -15,8 +15,6 @@ class Inf(SqlAlchemyBase):
     town_inf = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     quest = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     quest_ans = sqlalchemy.Column(sqlalchemy.String, nullable=True)
-    melody = sqlalchemy.Column(sqlalchemy.String, nullable=True)
-    melody_inf = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     inst = sqlalchemy.Column(sqlalchemy.Integer,
                              sqlalchemy.ForeignKey("view.id"))
     view = orm.relation('View')

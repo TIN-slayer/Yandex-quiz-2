@@ -38,7 +38,7 @@ def handle_dialog(res, req, restart=False):
     sp = [i.name for i in session.query(View).all()]
     if req['session']['new'] or restart:
         res['response'][
-            'text'] = 'Привет! Меня зовут Алиса, давай сыграем в разные викторины. С чего начнём?'
+            'text'] = 'Привет! Меня зовут Алиса, викторину на тему: "Города мира". С чего начнём?'
         res['response']['buttons'] = get_suggests(sp)
         game = Game()
         game.round = 1
@@ -59,6 +59,7 @@ def handle_dialog(res, req, restart=False):
         if players.first() is None:
             res['response'][
                 'text'] = 'С игрой определились, теперь, сколько раундов будем играть?'
+            res['response']['buttons'] = get_suggests(['1', '2', '3', '4', '5', 'Сам напишу!'])
             return
     if req['request']['original_utterance'] == 'Выйти из матча':
         game.end = True
@@ -86,6 +87,7 @@ def handle_dialog(res, req, restart=False):
         if get_number(req) is None:
             res['response'][
                 'text'] = 'Повторите, пожалуйста, сколько будет раундов?'
+            res['response']['buttons'] = get_suggests(['1', '2', '3', '4', '5', 'Сам напишу!'])
             return
         else:
             game.view.rounds = int(get_number(req))
@@ -94,6 +96,7 @@ def handle_dialog(res, req, restart=False):
                 res['response'][
                     'text'] = 'С этим определились, теперь, все игроки, назовите, пожалуйста, ' \
                               'своё имя без фамилии и отчества.'
+                res['response']['buttons'] = get_suggests(['и Саша, и Вася, и Коля', 'Маша и Наташа', 'Сам напишу!'])
                 return
 
     if players.first() is None:
@@ -101,6 +104,7 @@ def handle_dialog(res, req, restart=False):
         if not bool(gamers):
             res['response']['text'] = \
                 'Повторите, пожалуйста, кто будет играть?'
+            res['response']['buttons'] = get_suggests(['и Саша, и Вася, и Коля', 'Маша и Наташа', 'Сам напишу!'])
         else:
             for name in gamers:
                 player = Player()
@@ -117,11 +121,12 @@ def handle_dialog(res, req, restart=False):
         game.contin = True
         session.commit()
         if req['request']['original_utterance'] == 'Закончить игру' or game.round > game.view.rounds:
-            quit(res, req, players, session)
+            quit(res, req, players, session, game)
         else:
-            res['response']['buttons'] = get_suggests(['Закончить игру'])
-            if game.view.name == 'Towns':
+            if game.view.name == 'Угадай город по картинке':
                 play_towns(res, req)
+            elif game.view.name == 'Вопросы по городам':
+                play_quests(res, req)
 
 
 def play_towns(res, req, fin=False):
@@ -131,7 +136,7 @@ def play_towns(res, req, fin=False):
     game = game[-1]
     player = session.query(Player).filter(Player.match == game.id, Player.round == game.round - 1).first()
     check = session.query(Player).filter(Player.match == game.id).first()
-    dano1 = session.query(Inf).filter(Inf.inst == game.view.id)
+    dano1 = session.query(Inf).filter(Inf.inst == game.view.id).all()
     dano = []
     for i in dano1:
         if i.valid is True:
@@ -151,13 +156,15 @@ def play_towns(res, req, fin=False):
             if i.now is True:
                 town = i
                 break
+        town1 = town.town.split()[0].lower()
         player1 = session.query(Player).filter(Player.match == game.id).all()
         for i in player1:
             if i.now is True:
                 player1 = i
                 break
-        if city == town.town:
-            itog = f'Молодец ответ правильный, + {game.view.price} очка! '
+        print(city, town1)
+        if city == town1:
+            itog = f'Молодец, ответ правильный, + {game.view.price} очко! '
             num = int(player1.points)
             player1.points = num + int(game.view.price)
             session.commit()
@@ -180,12 +187,86 @@ def play_towns(res, req, fin=False):
         town.now = True
         town.valid = False
         session.commit()
+        variant = town.town.split()
+        random.shuffle(variant)
+        variant.append('Закончить игру')
         res['response']['text'] = 'Error'
         res['response']['card'] = {}
         res['response']['card']['type'] = 'BigImage'
         res['response']['card']['image_id'] = town.town_inf
         res['response']['card'][
             'title'] = f'{itog}{game.round} раунд, {player.name.title()}, угадай, что это за город на фотографии?'
+        res['response']['buttons'] = get_suggests(variant)
+        player = session.query(Player).filter(Player.match == game.id, Player.round == game.round - 1).first()
+        if player is None:
+            game.round += 1
+            session.commit()
+    session.commit()
+
+
+def play_quests(res, req, fin=False):
+    session = db_session.create_session()
+    itog = ''
+    game = session.query(Game).all()
+    game = game[-1]
+    player = session.query(Player).filter(Player.match == game.id, Player.round == game.round - 1).first()
+    check = session.query(Player).filter(Player.match == game.id).first()
+    dano1 = session.query(Inf).filter(Inf.inst == game.view.id).all()
+    dano = []
+    for i in dano1:
+        if i.valid is True:
+            dano.append(i)
+    if not bool(dano):
+        dano1 = session.query(Inf).filter(Inf.inst == game.view.id).all()
+        dano = []
+        for i in dano1:
+            i.valid = True
+            if i.now is not True:
+                dano.append(i)
+        session.commit()
+    if check.round != 0:
+        ans = req['request']['original_utterance'].lower()
+        quest = session.query(Inf).filter(Inf.inst == game.view.id).all()
+        for i in quest:
+            if i.now is True:
+                quest = i
+                break
+        print(quest.quest_ans)
+        quest1 = quest.quest_ans.split(', ')[0].lower()
+        player1 = session.query(Player).filter(Player.match == game.id).all()
+        for i in player1:
+            if i.now is True:
+                player1 = i
+                break
+        if ans == quest1:
+            itog = f'Молодец, ответ правильный, + {game.view.price} очка! '
+            num = int(player1.points)
+            player1.points = num + int(game.view.price)
+            session.commit()
+        else:
+            itog = 'Извини, но ответ неправильный. '
+        quest.now = False
+        player1.now = False
+        session.commit()
+    if fin:
+        return itog
+    else:
+        player.round += 1
+        player.now = True
+        quest2 = session.query(Inf).filter(Inf.inst == game.view.id).all()
+        for i in quest2:
+            if i.now is True:
+                i.now = False
+                break
+        quest = random.choice(dano)
+        quest.now = True
+        quest.valid = False
+        session.commit()
+        res['response']['text'] = f'{itog}{game.round} раунд, {player.name.title()}, {quest.quest}'
+        variant = quest.quest_ans.split(', ')
+        random.shuffle(variant)
+        variant.append('Закончить игру')
+        res['response']['buttons'] = get_suggests(variant)
         player = session.query(Player).filter(Player.match == game.id, Player.round == game.round - 1).first()
         if player is None:
             game.round += 1
@@ -223,8 +304,11 @@ def get_suggests(sp):
     return suggests
 
 
-def quit(res, req, players, session):
-    itog = play_towns(res, req, True)
+def quit(res, req, players, session, game):
+    if game.view.name == 'Угадай город по картинке':
+        itog = play_towns(res, req, fin=True)
+    elif game.view.name == 'Вопросы по городам':
+        itog = play_quests(res, req, fin=True)
     pobeda = ''
     winners = []
     maxim = max(players.all(), key=lambda x: x.points).points
