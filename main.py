@@ -38,7 +38,7 @@ def handle_dialog(res, req, restart=False):
     sp = [i.name for i in session.query(View).all()]
     if req['session']['new'] or restart:
         res['response'][
-            'text'] = 'Привет! Меня зовут Алиса, викторину на тему: "Города мира". С чего начнём?'
+            'text'] = 'Привет! Меня зовут Алиса, сыграем викторину на тему: "Города мира". С чего начнём?'
         res['response']['buttons'] = get_suggests(sp)
         game = Game()
         game.round = 1
